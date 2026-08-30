@@ -78,7 +78,7 @@ es.bancamarch.colorblind3d
   variant Gradle de tipo `jvm` que funciona directamente en un proyecto `kotlin("jvm")` de
   escritorio sin necesidad del plugin de Kotlin Multiplatform.
 
-## Distribución (Linux y Windows)
+## Distribución (Linux, Windows y Arch Linux)
 
 El empaquetado nativo (instalador `.deb` en Linux, `.msi` en Windows) se genera con el plugin de
 Compose Desktop, que por debajo usa `jpackage`. **`jpackage` no permite cross-compilar**: para
@@ -96,6 +96,15 @@ distribución para ambos sistemas se genera con **GitHub Actions**
 ./gradlew createReleaseDistributable
 ./build/compose/binaries/main-release/app/ColorBlind3D/bin/ColorBlind3D
 ```
+
+`jpackage` tampoco soporta el formato de paquete de **Arch Linux** (`.pkg.tar.zst`), así que el
+workflow incluye un job adicional `package-archlinux` que corre en un contenedor
+`archlinux:base-devel`: genera el mismo directorio "distributable" con
+`createReleaseDistributable` y lo empaqueta con `makepkg` usando un `PKGBUILD` generado
+dinámicamente (instala la app en `/opt/colorblind3d`, crea un symlink en `/usr/bin/colorblind3d`
+y una entrada `.desktop`). Se ha verificado localmente con Docker (`archlinux:base-devel` +
+`makepkg` real contra un directorio de app simulado) que el `PKGBUILD` generado es válido y
+produce un `.pkg.tar.zst` instalable con `pacman -U`.
 
 La build de **release** habilita ProGuard (vía `proguard-rules.pro`) para minificar/optimizar el
 jar empaquetado. Esto se ha verificado localmente ejecutando el binario Linux real (no solo

@@ -1,10 +1,13 @@
-name: Build distributables (Linux + Windows)
+name: Build distributables (Linux + Windows + Arch Linux)
 
-# Genera los instaladores nativos de la aplicación (paquete .deb para Linux y .msi para
-# Windows) usando el empaquetado de Compose Desktop (jpackage), que necesita ejecutarse en
-# cada sistema operativo objetivo — jpackage no soporta cross-compilation desde Linux hacia
-# Windows, por lo que se usa una matriz de runners de GitHub Actions (ubuntu-latest +
-# windows-latest) en lugar de Docker.
+# Genera los instaladores nativos de la aplicación (paquete .deb para Linux, .msi para
+# Windows y .pkg.tar.zst para Arch Linux) usando el empaquetado de Compose Desktop (jpackage),
+# que necesita ejecutarse en cada sistema operativo objetivo — jpackage no soporta
+# cross-compilation desde Linux hacia Windows, por lo que se usa una matriz de runners de
+# GitHub Actions (ubuntu-latest + windows-latest) en lugar de Docker. El paquete de Arch Linux
+# no lo genera jpackage (no soporta ese formato); se construye a mano con `makepkg` dentro de
+# un contenedor `archlinux:base-devel`, empaquetando el mismo directorio "distributable" que
+# genera Compose Desktop.
 on:
   push:
     branches: [main]
@@ -94,3 +97,92 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.artifact-glob }}
+
+  package-archlinux:
+    name: Empaquetar para Arch Linux (.pkg.tar.zst)
+    needs: test
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Instalar dependencias del contenedor (git, JDK 17)
+        run: pacman -Syu --noconfirm --needed git jdk17-openjdk
+
+      - uses: actions/checkout@v4
+
+      - name: Cache de dependencias Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-archlinux-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Generar el distribuible de release
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk
+        run: ./gradlew --no-daemon createReleaseDistributable
+
+      - name: Construir el paquete pacman con makepkg
+        run: |
+          set -euo pipefail
+
+          PKG_APP_NAME="$(grep -m1 'packageName' build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')"
+          PKG_VERSION="$(grep -m1 'packageVersion' build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')"
+          APP_SRC="$GITHUB_WORKSPACE/build/compose/binaries/main-release/app/${PKG_APP_NAME}"
+
+          # makepkg se niega a ejecutarse como root, así que se crea un usuario de compilación
+          # sin privilegios y se le cede la carpeta de trabajo.
+          useradd -m builder
+          mkdir -p /tmp/pkgbuild
+          cat > /tmp/pkgbuild/PKGBUILD <<PKGBUILD_EOF
+          pkgname=colorblind3d
+          pkgver=${PKG_VERSION}
+          pkgrel=1
+          pkgdesc="Identifica los colores de un modelo 3MF de Bambu Studio y busca filamentos reales equivalentes (filamentcolors.xyz)"
+          arch=('x86_64')
+          url="https://github.com/${{ github.repository }}"
+          license=('custom')
+          depends=('gtk3' 'libxtst' 'libxrender')
+          options=('!strip' '!emptydirs' '!debug')
+          source=()
+          sha256sums=()
+
+          package() {
+            install -dm755 "\$pkgdir/opt/colorblind3d"
+            cp -a "${APP_SRC}"/. "\$pkgdir/opt/colorblind3d/"
+            find "\$pkgdir/opt/colorblind3d/bin" -type f -exec chmod 755 {} +
+
+            install -dm755 "\$pkgdir/usr/bin"
+            ln -s /opt/colorblind3d/bin/${PKG_APP_NAME} "\$pkgdir/usr/bin/colorblind3d"
+
+            install -dm755 "\$pkgdir/usr/share/applications"
+            cat > "\$pkgdir/usr/share/applications/colorblind3d.desktop" <<DESKTOP_EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Colorblind Friend
+          Comment=Identifica colores de modelos 3MF y busca filamentos equivalentes
+          Exec=/opt/colorblind3d/bin/${PKG_APP_NAME}
+          Icon=utilities-color-chooser
+          Categories=Graphics;3DGraphics;Utility;
+          Terminal=false
+          DESKTOP_EOF
+          }
+          PKGBUILD_EOF
+
+          chown -R builder:builder /tmp/pkgbuild
+          cd /tmp/pkgbuild
+          su builder -c "makepkg -f --noconfirm"
+          cp ./*.pkg.tar.zst "$GITHUB_WORKSPACE/"
+
+      - name: Publicar el artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorblind3d-archlinux-pkg
+          path: "*.pkg.tar.zst"
+          if-no-files-found: error
+
+      - name: Adjuntar a la release (solo en tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.pkg.tar.zst"
