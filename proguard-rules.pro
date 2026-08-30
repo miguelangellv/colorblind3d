@@ -28,7 +28,7 @@
 }
 
 # --- kotlinx.serialization: mantener los serializadores generados y companion objects ---
--keepattributes *Annotation*, InnerClasses
+-keepattributes *Annotation*, InnerClasses, Exceptions
 -dontnote kotlinx.serialization.**
 -keep,includedescriptorclasses class es.bancamarch.colorblind3d.**$$serializer { *; }
 -keepclassmembers class es.bancamarch.colorblind3d.** {
@@ -42,10 +42,13 @@
 # ejecución vía java.util.ServiceLoader (ficheros META-INF/services); si ProGuard elimina o
 # renombra esas clases de implementación, el ServiceLoader falla con
 # "Provider ... not found" aunque compile sin problemas.
+# Nota: la interfaz real es io.ktor.client.HttpClientEngineContainer (sin ".engine"), no
+# io.ktor.client.engine.HttpClientEngineContainer. Se corrige el paquete para que el -keep
+# realmente aplique aunque en el futuro se reduzca el alcance de la regla genérica de abajo.
 -keep class io.ktor.client.engine.cio.** { *; }
--keep class io.ktor.client.engine.HttpClientEngineContainer
--keep interface io.ktor.client.engine.HttpClientEngineContainer
--keep class * implements io.ktor.client.engine.HttpClientEngineContainer { *; }
+-keep class io.ktor.client.HttpClientEngineContainer
+-keep interface io.ktor.client.HttpClientEngineContainer
+-keep class * implements io.ktor.client.HttpClientEngineContainer { *; }
 -keep class io.ktor.serialization.kotlinx.json.** { *; }
 -keep interface io.ktor.serialization.kotlinx.KotlinxSerializationExtensionProvider
 -keep class * implements io.ktor.serialization.kotlinx.KotlinxSerializationExtensionProvider { *; }
@@ -58,9 +61,18 @@
 -keep class nl.adaptivity.xmlutil.** { *; }
 -dontwarn nl.adaptivity.xmlutil.**
 
-# --- Coil3: usa reflexión/ServiceLoader para descubrir decodificadores y fetchers ---
+# --- Coil3: usa reflexión/ServiceLoader para descubrir decodificadores y fetchers. okio se usa
+# para la caché en disco (rutas/ficheros) y skiko/skia para decodificar los bytes de imagen; si
+# cualquiera de las dos se recorta, la carga de imágenes falla en silencio (AsyncImage no
+# muestra ningún error por defecto) y solo se ve el hueco/placeholder en blanco. ---
 -keep class coil3.** { *; }
 -dontwarn coil3.**
+-keep class okio.** { *; }
+-dontwarn okio.**
+-keep class org.jetbrains.skia.** { *; }
+-keep class org.jetbrains.skiko.** { *; }
+-dontwarn org.jetbrains.skia.**
+-dontwarn org.jetbrains.skiko.**
 
 # --- Punto de entrada de la aplicación ---
 -keep class es.bancamarch.colorblind3d.MainKt { *; }

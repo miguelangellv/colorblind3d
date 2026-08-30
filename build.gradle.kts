@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "es.bancamarch"
-version = "0.2.0"
+version = "0.2.1"
 
 repositories {
     mavenCentral()
@@ -71,7 +71,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Dmg, TargetFormat.Msi)
             packageName = "ColorBlind3D"
-            packageVersion = "0.2.0"
+            packageVersion = "0.2.1"
         }
         buildTypes.release.proguard {
             configurationFiles.from(project.file("proguard-rules.pro"))
