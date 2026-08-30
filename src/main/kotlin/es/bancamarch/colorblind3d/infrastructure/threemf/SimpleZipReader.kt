@@ -35,6 +35,9 @@ internal class SimpleZipReader(private val handle: FileHandle) : AutoCloseable {
 
     fun exists(name: String): Boolean = entries.containsKey(name)
 
+    /** Nombres de todas las entradas del ZIP, para poder localizar ficheros por patrón (p.ej. `*.model`). */
+    fun entryNames(): Set<String> = entries.keys
+
     fun readText(name: String): String = readBytes(name).toString(Charsets.UTF_8)
 
     fun readBytes(name: String): ByteArray {

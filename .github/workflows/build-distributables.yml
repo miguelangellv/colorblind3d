@@ -105,7 +105,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Instalar dependencias del contenedor (git, JDK 17)
-        run: pacman -Syu --noconfirm --needed git jdk17-openjdk
+        run: pacman -Syu --noconfirm --needed git jdk17-openjdk gtk3 libxtst libxrender
 
       - uses: actions/checkout@v4
 
